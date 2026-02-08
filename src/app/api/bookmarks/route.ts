@@ -4,7 +4,7 @@ import { getUserData, setUserData, getCachedBookmarks, appendCachedBookmarks } f
 import { ensureValidToken, fetchBookmarks, mergeBookmarksWithAuthors } from "@/lib/x-api";
 import { Bookmark } from "@/types";
 
-const PAID_BATCH_SIZE = 500;
+const MORE_BATCH_SIZE = 500;
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -13,24 +13,14 @@ export async function GET(request: NextRequest) {
   }
 
   const typeParam = request.nextUrl.searchParams.get("type");
-  if (typeParam !== null && typeParam !== "free" && typeParam !== "paid") {
+  if (typeParam !== null && typeParam !== "free" && typeParam !== "more") {
     return NextResponse.json({ error: "Invalid type" }, { status: 400 });
   }
-  const type: "free" | "paid" = (typeParam ?? "free") as "free" | "paid";
+  const type: "free" | "more" = (typeParam ?? "free") as "free" | "more";
 
   let userData = await getUserData(session.xUserId);
   if (!userData) {
     return NextResponse.json({ error: "Session expired. Please sign in again." }, { status: 401 });
-  }
-
-  // For paid fetches, check that the user has available batches
-  if (type === "paid") {
-    const paidFetchesUsed = userData.totalFetched > 25
-      ? Math.ceil((userData.totalFetched - 25) / PAID_BATCH_SIZE)
-      : 0;
-    if (paidFetchesUsed >= userData.paidBatches) {
-      return NextResponse.json({ error: "No paid batches available. Purchase more." }, { status: 402 });
-    }
   }
 
   // FREE: If bookmarks were already fetched (and not refreshing), return cached data
@@ -40,7 +30,6 @@ export async function GET(request: NextRequest) {
       bookmarks: cached,
       hasMore: userData.nextToken !== null,
       totalFetched: userData.totalFetched,
-      paidBatches: userData.paidBatches,
     });
   }
 
@@ -50,7 +39,6 @@ export async function GET(request: NextRequest) {
       bookmarks: [],
       hasMore: false,
       totalFetched: userData.totalFetched,
-      paidBatches: userData.paidBatches,
     });
   }
 
@@ -76,21 +64,20 @@ export async function GET(request: NextRequest) {
         bookmarks,
         hasMore: !!apiResponse.meta.next_token,
         totalFetched: userData.totalFetched,
-        paidBatches: userData.paidBatches,
       });
     }
 
-    // Paid: loop up to 20 API calls (25 each) to get 500 bookmarks
+    // More: loop up to 20 API calls (25 each) to get 500 bookmarks
     // NOTE: We use max_results=25 because the X API has a bug where
     // large page sizes (e.g. 100) cause pagination to cut off prematurely,
     // returning far fewer results than actually available.
     const allBookmarks: Bookmark[] = [];
-    let remaining = PAID_BATCH_SIZE;
+    let remaining = MORE_BATCH_SIZE;
     let hasMore = true;
-    const MAX_PAID_API_CALLS = 20;
+    const MAX_API_CALLS = 20;
     let calls = 0;
 
-    while (remaining > 0 && hasMore && calls < MAX_PAID_API_CALLS) {
+    while (remaining > 0 && hasMore && calls < MAX_API_CALLS) {
       calls += 1;
       const maxResults = Math.min(remaining, 25);
       const apiResponse = await fetchBookmarks(
@@ -127,7 +114,6 @@ export async function GET(request: NextRequest) {
       bookmarks: allBookmarks,
       hasMore,
       totalFetched: userData.totalFetched,
-      paidBatches: userData.paidBatches,
     });
   } catch (err) {
     console.error("Bookmark fetch error:", err);

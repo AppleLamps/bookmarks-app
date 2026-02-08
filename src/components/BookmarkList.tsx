@@ -4,21 +4,18 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Bookmark, BookmarkFolder, BookmarksResponse } from "@/types";
 import BookmarkCard from "./BookmarkCard";
 import DownloadButton from "./DownloadButton";
-import BuyMoreButton from "./BuyMoreButton";
+import FetchMoreButton from "./BuyMoreButton";
 
 interface BookmarkListProps {
   username: string;
-  paymentStatus?: string | null;
 }
 
-export default function BookmarkList({ username, paymentStatus }: BookmarkListProps) {
+export default function BookmarkList({ username }: BookmarkListProps) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [totalFetched, setTotalFetched] = useState(0);
-  const [paidBatches, setPaidBatches] = useState(0);
-  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   // Folders state
   const [folders, setFolders] = useState<BookmarkFolder[]>([]);
@@ -32,7 +29,7 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
   // Search state
   const [search, setSearch] = useState("");
 
-  const fetchBookmarks = useCallback(async (type: "free" | "paid") => {
+  const fetchBookmarks = useCallback(async (type: "free" | "more") => {
     setLoading(true);
     setError(null);
     try {
@@ -46,7 +43,6 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
       setBookmarks((prev) => [...prev, ...data.bookmarks]);
       setHasMore(data.hasMore);
       setTotalFetched(data.totalFetched);
-      setPaidBatches(data.paidBatches);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -125,15 +121,8 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
 
   // Initial load: fetch free bookmarks
   useEffect(() => {
-    fetchBookmarks("free").then(() => setInitialLoadDone(true));
+    fetchBookmarks("free");
   }, [fetchBookmarks]);
-
-  // After payment success, fetch paid bookmarks
-  useEffect(() => {
-    if (paymentStatus === "success" && initialLoadDone) {
-      fetchBookmarks("paid");
-    }
-  }, [paymentStatus, initialLoadDone, fetchBookmarks]);
 
   // Filtered bookmarks
   const filteredBookmarks = useMemo(() => {
@@ -162,7 +151,7 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
     return result;
   }, [bookmarks, selectedFolder, folderMemberships, search]);
 
-  const canBuyMore = hasMore && !loading;
+  const canFetchMore = hasMore && !loading;
   const folderFilterLoading = !!selectedFolder
     && folderMemberships[selectedFolder] === undefined
     && loadingFolderId === selectedFolder;
@@ -181,7 +170,12 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
         </div>
         <div className="flex items-center gap-2">
           <DownloadButton bookmarks={filteredBookmarks} username={username} />
-          {canBuyMore && <BuyMoreButton />}
+          {canFetchMore && (
+            <FetchMoreButton
+              onClick={() => fetchBookmarks("more")}
+              loading={loading}
+            />
+          )}
         </div>
       </div>
 
@@ -276,12 +270,6 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
       {error && (
         <div className="animate-fade-in-scale mb-6 p-3 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 rounded-xl text-sm border border-red-200 dark:border-red-900/50">
           {error}
-        </div>
-      )}
-
-      {paymentStatus === "cancelled" && (
-        <div className="animate-fade-in-scale mb-6 p-3 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-xl text-sm border border-amber-200 dark:border-amber-900/50">
-          Payment was cancelled. You can try again anytime.
         </div>
       )}
 

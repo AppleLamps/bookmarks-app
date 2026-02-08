@@ -40,8 +40,6 @@ export async function GET(request: NextRequest) {
       profileImageUrl: profile.profile_image_url,
       nextToken: null,
       totalFetched: 0,
-      paidBatches: 0,
-      stripeSessionIds: [],
     };
 
     await setUserData(profile.id, userData);

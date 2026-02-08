@@ -25,7 +25,7 @@ export default async function Home({
         {/* Badge */}
         <div className="animate-fade-in inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-200 dark:border-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400 mb-8 bg-white/80 dark:bg-white/5 backdrop-blur-sm">
           <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-          Simple & fast export
+          Self-hosted · your API keys
         </div>
 
         {/* Heading */}
@@ -38,7 +38,7 @@ export default async function Home({
         <p className="animate-fade-in-delay-2 text-base text-gray-500 dark:text-gray-400 mb-10 max-w-sm mx-auto leading-relaxed">
           Export your X bookmarks as structured JSON.
           <br className="hidden sm:block" />
-          Get your first 25 free.
+          25 on first load, then 500 at a time.
         </p>
 
         {error && (
@@ -73,14 +73,14 @@ export default async function Home({
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            25 free
+            Open source
           </div>
           <div className="w-px h-3 bg-gray-200 dark:bg-gray-800" />
           <div className="flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
-            $5 / 500
+            Your own API
           </div>
           <div className="w-px h-3 bg-gray-200 dark:bg-gray-800" />
           <div className="flex items-center gap-1.5">

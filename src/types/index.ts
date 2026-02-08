@@ -108,7 +108,6 @@ export interface BookmarksResponse {
   bookmarks: Bookmark[];
   hasMore: boolean;
   totalFetched: number;
-  paidBatches: number;
 }
 
 export interface FoldersResponse {
@@ -124,8 +123,6 @@ export interface UserKVData {
   profileImageUrl: string;
   nextToken: string | null;
   totalFetched: number;
-  paidBatches: number;
-  stripeSessionIds: string[];
 }
 
 export interface SessionPayload {

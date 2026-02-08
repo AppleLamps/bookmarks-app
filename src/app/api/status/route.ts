@@ -15,7 +15,6 @@ export async function GET() {
 
   return NextResponse.json({
     totalFetched: userData.totalFetched,
-    paidBatches: userData.paidBatches,
     hasMore: userData.nextToken !== null,
   });
 }
