@@ -12,7 +12,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const type = request.nextUrl.searchParams.get("type") || "free";
+  const typeParam = request.nextUrl.searchParams.get("type");
+  if (typeParam !== null && typeParam !== "free" && typeParam !== "paid") {
+    return NextResponse.json({ error: "Invalid type" }, { status: 400 });
+  }
+  const type: "free" | "paid" = (typeParam ?? "free") as "free" | "paid";
 
   let userData = await getUserData(session.xUserId);
   if (!userData) {
@@ -80,8 +84,11 @@ export async function GET(request: NextRequest) {
     const allBookmarks: Bookmark[] = [];
     let remaining = PAID_BATCH_SIZE;
     let hasMore = true;
+    const MAX_PAID_API_CALLS = 5;
+    let calls = 0;
 
-    while (remaining > 0 && hasMore) {
+    while (remaining > 0 && hasMore && calls < MAX_PAID_API_CALLS) {
+      calls += 1;
       const maxResults = Math.min(remaining, 100);
       const apiResponse = await fetchBookmarks(
         userData.accessToken,
@@ -93,10 +100,16 @@ export async function GET(request: NextRequest) {
       const bookmarks = mergeBookmarksWithAuthors(apiResponse);
       allBookmarks.push(...bookmarks);
 
+      const resultCount = apiResponse.meta.result_count ?? 0;
       userData.nextToken = apiResponse.meta.next_token || null;
-      userData.totalFetched += apiResponse.meta.result_count;
-      remaining -= apiResponse.meta.result_count;
+      userData.totalFetched += resultCount;
+      remaining -= resultCount;
       hasMore = !!apiResponse.meta.next_token;
+
+      // Avoid spinning if the API returns empty pages while still providing a next token.
+      if (resultCount === 0) {
+        break;
+      }
     }
 
     await setUserData(session.xUserId, userData);

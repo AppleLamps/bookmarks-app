@@ -4,8 +4,13 @@ import { createHash } from "crypto";
 import { SessionPayload } from "@/types";
 
 // A256GCM requires exactly 32 bytes — hash whatever secret is provided to guarantee that
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+  throw new Error("SESSION_SECRET is required");
+}
+
 const SECRET = createHash("sha256")
-  .update(process.env.SESSION_SECRET || "fallback-secret-change-in-production!!")
+  .update(sessionSecret)
   .digest();
 
 const COOKIE_NAME = "bm_session";
