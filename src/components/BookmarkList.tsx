@@ -59,57 +59,63 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-bold">Your Bookmarks</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Your Bookmarks</h2>
           {totalFetched > 0 && (
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-xs text-[var(--muted)] mt-1 tabular-nums">
               {totalFetched} bookmark{totalFetched !== 1 ? "s" : ""} loaded
             </p>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <DownloadButton bookmarks={bookmarks} username={username} />
           {canBuyMore && <BuyMoreButton />}
         </div>
       </div>
 
       {error && (
-        <div className="mb-6 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
+        <div className="animate-fade-in-scale mb-6 p-3 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 rounded-xl text-sm border border-red-200 dark:border-red-900/50">
           {error}
         </div>
       )}
 
       {paymentStatus === "cancelled" && (
-        <div className="mb-6 p-3 bg-yellow-100 text-yellow-700 rounded-lg text-sm">
+        <div className="animate-fade-in-scale mb-6 p-3 bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 rounded-xl text-sm border border-amber-200 dark:border-amber-900/50">
           Payment was cancelled. You can try again anytime.
         </div>
       )}
 
-      <div className="space-y-3">
-        {bookmarks.map((bookmark) => (
-          <BookmarkCard key={bookmark.id} bookmark={bookmark} />
+      <div className="space-y-2">
+        {bookmarks.map((bookmark, i) => (
+          <div key={bookmark.id} style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }} className="animate-fade-in">
+            <BookmarkCard bookmark={bookmark} />
+          </div>
         ))}
       </div>
 
       {loading && (
-        <div className="flex justify-center py-12">
-          <svg className="w-6 h-6 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
+        <div className="flex justify-center py-16">
+          <div className="flex items-center gap-3 text-sm text-[var(--muted)]">
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            Loading bookmarks...
+          </div>
         </div>
       )}
 
       {!loading && bookmarks.length === 0 && !error && (
-        <div className="text-center py-12 text-gray-500">
-          No bookmarks found. Start bookmarking posts on X!
+        <div className="text-center py-16">
+          <p className="text-sm text-[var(--muted)]">No bookmarks found.</p>
+          <p className="text-xs text-[var(--muted)] mt-1 opacity-60">Start bookmarking posts on X!</p>
         </div>
       )}
 
       {!loading && !hasMore && bookmarks.length > 0 && (
-        <div className="text-center py-8 text-sm text-gray-400">
-          All bookmarks loaded.
+        <div className="text-center py-10 text-xs text-[var(--muted)] opacity-60">
+          All bookmarks loaded
         </div>
       )}
     </div>
