@@ -54,7 +54,7 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
     }
   }, [paymentStatus, initialLoadDone, fetchBookmarks]);
 
-  const paidFetchesUsed = totalFetched > 25 ? Math.ceil((totalFetched - 25) / 100) : 0;
+  const paidFetchesUsed = totalFetched > 25 ? Math.ceil((totalFetched - 25) / 500) : 0;
   const canBuyMore = hasMore && !loading;
 
   return (
