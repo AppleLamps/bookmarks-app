@@ -17,7 +17,7 @@ export async function POST() {
         {
           price_data: {
             currency: "usd",
-            unit_amount: 100,
+            unit_amount: 500,
             product_data: {
               name: "500 X Bookmarks Export",
               description: "Export 500 additional bookmarks from your X account",
