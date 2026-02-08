@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { getUserData, setUserData } from "@/lib/kv";
+import { getUserData, setUserData, getCachedBookmarks, appendCachedBookmarks } from "@/lib/kv";
 import { ensureValidToken, fetchBookmarks, mergeBookmarksWithAuthors } from "@/lib/x-api";
 import { Bookmark } from "@/types";
 
@@ -29,7 +29,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Check if there are more bookmarks to fetch
+  // FREE: If bookmarks were already fetched (and not refreshing), return cached data
+  if (type === "free" && userData.totalFetched > 0) {
+    const cached = await getCachedBookmarks(session.xUserId);
+    return NextResponse.json({
+      bookmarks: cached,
+      hasMore: userData.nextToken !== null,
+      totalFetched: userData.totalFetched,
+      paidBatches: userData.paidBatches,
+    });
+  }
+
+  // Check if there are no more bookmarks to fetch
   if (userData.totalFetched > 0 && userData.nextToken === null) {
     return NextResponse.json({
       bookmarks: [],
@@ -55,6 +66,7 @@ export async function GET(request: NextRequest) {
       userData.nextToken = apiResponse.meta.next_token || null;
       userData.totalFetched += apiResponse.meta.result_count;
       await setUserData(session.xUserId, userData);
+      await appendCachedBookmarks(session.xUserId, bookmarks);
 
       return NextResponse.json({
         bookmarks,
@@ -88,6 +100,7 @@ export async function GET(request: NextRequest) {
     }
 
     await setUserData(session.xUserId, userData);
+    await appendCachedBookmarks(session.xUserId, allBookmarks);
 
     return NextResponse.json({
       bookmarks: allBookmarks,

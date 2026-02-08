@@ -173,8 +173,8 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
           <button
             onClick={() => setSelectedFolder(null)}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all whitespace-nowrap ${!selectedFolder
-                ? "bg-[var(--foreground)] text-[var(--background)] border-transparent"
-                : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-gray-300 dark:hover:border-gray-600"
+              ? "bg-[var(--foreground)] text-[var(--background)] border-transparent"
+              : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-gray-300 dark:hover:border-gray-600"
               }`}
           >
             All
@@ -184,8 +184,8 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
               key={folder.id}
               onClick={() => setSelectedFolder(folder.id === selectedFolder ? null : folder.id)}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all whitespace-nowrap ${selectedFolder === folder.id
-                  ? "bg-[var(--foreground)] text-[var(--background)] border-transparent"
-                  : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-gray-300 dark:hover:border-gray-600"
+                ? "bg-[var(--foreground)] text-[var(--background)] border-transparent"
+                : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-gray-300 dark:hover:border-gray-600"
                 }`}
             >
               <span className="flex items-center gap-1.5">

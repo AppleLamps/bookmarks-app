@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession, deleteSessionCookie } from "@/lib/session";
-import { getUserData, deleteUserData } from "@/lib/kv";
+import { getUserData, deleteUserData, deleteCachedBookmarks } from "@/lib/kv";
 import { revokeToken } from "@/lib/oauth";
 
 export async function POST() {
@@ -13,6 +13,7 @@ export async function POST() {
         await revokeToken(userData.accessToken);
       }
       await deleteUserData(session.xUserId);
+      await deleteCachedBookmarks(session.xUserId);
     } catch (err) {
       console.error("Error revoking token:", err);
     }
