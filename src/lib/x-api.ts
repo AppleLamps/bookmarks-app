@@ -1,6 +1,6 @@
 import { refreshAccessToken } from "./oauth";
 import { getUserData, setUserData } from "./kv";
-import { Bookmark, UserKVData, XApiBookmarksResponse } from "@/types";
+import { Bookmark, BookmarkFolder, UserKVData, XApiBookmarksResponse, XApiFoldersResponse, XApiFolderPostsResponse } from "@/types";
 
 export async function ensureValidToken(userData: UserKVData, xUserId: string): Promise<UserKVData> {
   if (userData.tokenExpiresAt > Date.now() + 60_000) {
@@ -26,9 +26,10 @@ export async function fetchBookmarks(
 ): Promise<XApiBookmarksResponse> {
   const params = new URLSearchParams({
     max_results: String(maxResults),
-    "tweet.fields": "created_at,public_metrics,author_id",
-    expansions: "author_id",
-    "user.fields": "username,name,verified",
+    "tweet.fields": "created_at,public_metrics,author_id,entities,attachments,lang,referenced_tweets,note_tweet",
+    expansions: "author_id,attachments.media_keys",
+    "user.fields": "username,name,verified,profile_image_url,description,public_metrics",
+    "media.fields": "media_key,type,url,preview_image_url,alt_text,width,height,duration_ms,variants",
   });
 
   if (paginationToken) {
@@ -57,21 +58,114 @@ export async function fetchBookmarks(
 }
 
 export function mergeBookmarksWithAuthors(apiResponse: XApiBookmarksResponse): Bookmark[] {
-  const usersMap = new Map<string, { id: string; username: string; name: string; verified: boolean }>();
+  type UserEntry = NonNullable<NonNullable<XApiBookmarksResponse["includes"]>["users"]>[number];
+  type MediaEntry = NonNullable<NonNullable<XApiBookmarksResponse["includes"]>["media"]>[number];
+
+  const usersMap = new Map<string, UserEntry>();
   if (apiResponse.includes?.users) {
     for (const user of apiResponse.includes.users) {
       usersMap.set(user.id, user);
     }
   }
 
-  return (apiResponse.data || []).map((tweet) => ({
-    id: tweet.id,
-    text: tweet.text,
-    created_at: tweet.created_at,
-    author_id: tweet.author_id,
-    public_metrics: tweet.public_metrics,
-    author: usersMap.get(tweet.author_id),
-  }));
+  const mediaMap = new Map<string, MediaEntry>();
+  if (apiResponse.includes?.media) {
+    for (const m of apiResponse.includes.media) {
+      mediaMap.set(m.media_key, m);
+    }
+  }
+
+  return (apiResponse.data || []).map((tweet) => {
+    // Resolve media from attachments
+    const media = tweet.attachments?.media_keys
+      ?.map((key) => mediaMap.get(key))
+      .filter(Boolean) as Bookmark["media"];
+
+    // Use note_tweet text if available (long posts)
+    const fullText = tweet.note_tweet?.text || tweet.text;
+    const entities = tweet.note_tweet?.entities || tweet.entities;
+
+    return {
+      id: tweet.id,
+      text: fullText,
+      created_at: tweet.created_at,
+      author_id: tweet.author_id,
+      lang: tweet.lang,
+      public_metrics: tweet.public_metrics,
+      entities,
+      media: media && media.length > 0 ? media : undefined,
+      referenced_tweets: tweet.referenced_tweets,
+      note_tweet: tweet.note_tweet?.text,
+      author: usersMap.get(tweet.author_id),
+    };
+  });
+}
+
+export async function fetchBookmarkFolders(
+  accessToken: string,
+  userId: string
+): Promise<BookmarkFolder[]> {
+  const folders: BookmarkFolder[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({ max_results: "100" });
+    if (nextToken) params.set("pagination_token", nextToken);
+
+    const response = await fetch(
+      `https://api.x.com/2/users/${userId}/bookmarks/folders?${params}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to fetch bookmark folders: ${error}`);
+    }
+
+    const data: XApiFoldersResponse = await response.json();
+    if (data.data) {
+      folders.push(...data.data);
+    }
+    nextToken = data.meta?.next_token;
+  } while (nextToken);
+
+  return folders;
+}
+
+export async function fetchFolderPostIds(
+  accessToken: string,
+  userId: string,
+  folderId: string
+): Promise<string[]> {
+  const postIds: string[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const params = new URLSearchParams({ max_results: "100" });
+    if (nextToken) params.set("pagination_token", nextToken);
+
+    const response = await fetch(
+      `https://api.x.com/2/users/${userId}/bookmarks/folders/${folderId}?${params}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to fetch folder posts: ${error}`);
+    }
+
+    const data: XApiFolderPostsResponse = await response.json();
+    if (data.data) {
+      postIds.push(...data.data.map((d) => d.id));
+    }
+    nextToken = data.meta?.next_token;
+  } while (nextToken);
+
+  return postIds;
 }
 
 export async function fetchUserProfile(accessToken: string) {
