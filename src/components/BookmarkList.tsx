@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Bookmark, BookmarkFolder, BookmarksResponse, FoldersResponse } from "@/types";
+import { Bookmark, BookmarkFolder, BookmarksResponse } from "@/types";
 import BookmarkCard from "./BookmarkCard";
 import DownloadButton from "./DownloadButton";
 import BuyMoreButton from "./BuyMoreButton";
@@ -23,9 +23,9 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
   // Folders state
   const [folders, setFolders] = useState<BookmarkFolder[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null); // null = "All"
-  const [folderPostIds, setFolderPostIds] = useState<Set<string> | null>(null);
+  const [folderMemberships, setFolderMemberships] = useState<Record<string, string[]>>({}); // folderId -> postIds
+  const [postFolderMap, setPostFolderMap] = useState<Map<string, string[]>>(new Map()); // postId -> folderNames
   const [loadingFolders, setLoadingFolders] = useState(false);
-  const [loadingFolderPosts, setLoadingFolderPosts] = useState(false);
 
   // Search state
   const [search, setSearch] = useState("");
@@ -52,15 +52,31 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
     }
   }, []);
 
-  // Fetch folders on mount
+  // Fetch folders + memberships on mount
   useEffect(() => {
     async function loadFolders() {
       setLoadingFolders(true);
       try {
-        const res = await fetch("/api/folders");
+        const res = await fetch("/api/folders?includeMembers=true");
         if (res.ok) {
-          const data: FoldersResponse = await res.json();
-          setFolders(data.folders || []);
+          const data = await res.json();
+          const loadedFolders: BookmarkFolder[] = data.folders || [];
+          const memberships: Record<string, string[]> = data.memberships || {};
+          setFolders(loadedFolders);
+          setFolderMemberships(memberships);
+
+          // Build reverse map: postId -> folder names
+          const reverseMap = new Map<string, string[]>();
+          const folderNameById = new Map(loadedFolders.map((f) => [f.id, f.name]));
+          for (const [folderId, postIds] of Object.entries(memberships)) {
+            const folderName = folderNameById.get(folderId) || folderId;
+            for (const postId of postIds) {
+              const existing = reverseMap.get(postId) || [];
+              existing.push(folderName);
+              reverseMap.set(postId, existing);
+            }
+          }
+          setPostFolderMap(reverseMap);
         }
       } catch {
         // Folders are optional; silently ignore
@@ -83,34 +99,12 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
     }
   }, [paymentStatus, initialLoadDone, fetchBookmarks]);
 
-  // Fetch post IDs when a folder is selected
-  useEffect(() => {
-    if (!selectedFolder) {
-      setFolderPostIds(null);
-      return;
-    }
-    async function loadFolderPosts() {
-      setLoadingFolderPosts(true);
-      try {
-        const res = await fetch(`/api/folders?folderId=${selectedFolder}`);
-        if (res.ok) {
-          const data = await res.json();
-          setFolderPostIds(new Set(data.postIds || []));
-        }
-      } catch {
-        setFolderPostIds(null);
-      } finally {
-        setLoadingFolderPosts(false);
-      }
-    }
-    loadFolderPosts();
-  }, [selectedFolder]);
-
   // Filtered bookmarks
   const filteredBookmarks = useMemo(() => {
     let result = bookmarks;
 
-    if (folderPostIds) {
+    if (selectedFolder && folderMemberships[selectedFolder]) {
+      const folderPostIds = new Set(folderMemberships[selectedFolder]);
       result = result.filter((b) => folderPostIds.has(b.id));
     }
 
@@ -125,7 +119,7 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
     }
 
     return result;
-  }, [bookmarks, folderPostIds, search]);
+  }, [bookmarks, selectedFolder, folderMemberships, search]);
 
   const canBuyMore = hasMore && !loading;
 
@@ -215,22 +209,10 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
         </div>
       )}
 
-      {loadingFolderPosts && (
-        <div className="flex justify-center py-8">
-          <div className="flex items-center gap-3 text-sm text-[var(--muted)]">
-            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
-            Loading folder...
-          </div>
-        </div>
-      )}
-
       <div className="space-y-2">
         {filteredBookmarks.map((bookmark, i) => (
           <div key={bookmark.id} style={{ animationDelay: `${Math.min(i * 30, 300)}ms` }} className="animate-fade-in">
-            <BookmarkCard bookmark={bookmark} />
+            <BookmarkCard bookmark={bookmark} folderNames={postFolderMap.get(bookmark.id)} />
           </div>
         ))}
       </div>
@@ -247,7 +229,7 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
         </div>
       )}
 
-      {!loading && !loadingFolderPosts && filteredBookmarks.length === 0 && !error && (
+      {!loading && filteredBookmarks.length === 0 && !error && (
         <div className="text-center py-16">
           <p className="text-sm text-[var(--muted)]">
             {search || selectedFolder ? "No bookmarks match your filter." : "No bookmarks found."}

@@ -2,6 +2,7 @@ import { Bookmark, TweetEntity } from "@/types";
 
 interface BookmarkCardProps {
   bookmark: Bookmark;
+  folderNames?: string[];
 }
 
 function renderTextWithEntities(text: string, entities?: TweetEntity) {
@@ -108,7 +109,7 @@ const LANG_NAMES: Record<string, string> = {
   und: "Undetermined", qme: "Media only", qst: "Short text", zxx: "No language",
 };
 
-export default function BookmarkCard({ bookmark }: BookmarkCardProps) {
+export default function BookmarkCard({ bookmark, folderNames }: BookmarkCardProps) {
   const date = new Date(bookmark.created_at).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -246,6 +247,21 @@ export default function BookmarkCard({ bookmark }: BookmarkCardProps) {
             ) : null;
           })()}
         </a>
+      )}
+
+      {/* Folder tags */}
+      {folderNames && folderNames.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {folderNames.map((name) => (
+            <span
+              key={name}
+              className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/40"
+            >
+              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
+              {name}
+            </span>
+          ))}
+        </div>
       )}
 
       {/* Metrics row */}
