@@ -80,16 +80,19 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Paid: loop up to 5 API calls (100 each) to get 500 bookmarks
+    // Paid: loop up to 20 API calls (25 each) to get 500 bookmarks
+    // NOTE: We use max_results=25 because the X API has a bug where
+    // large page sizes (e.g. 100) cause pagination to cut off prematurely,
+    // returning far fewer results than actually available.
     const allBookmarks: Bookmark[] = [];
     let remaining = PAID_BATCH_SIZE;
     let hasMore = true;
-    const MAX_PAID_API_CALLS = 5;
+    const MAX_PAID_API_CALLS = 20;
     let calls = 0;
 
     while (remaining > 0 && hasMore && calls < MAX_PAID_API_CALLS) {
       calls += 1;
-      const maxResults = Math.min(remaining, 100);
+      const maxResults = Math.min(remaining, 25);
       const apiResponse = await fetchBookmarks(
         userData.accessToken,
         session.xUserId,
@@ -109,6 +112,11 @@ export async function GET(request: NextRequest) {
       // Avoid spinning if the API returns empty pages while still providing a next token.
       if (resultCount === 0) {
         break;
+      }
+
+      // Small delay between calls to avoid hitting rate limits
+      if (remaining > 0 && hasMore) {
+        await new Promise((r) => setTimeout(r, 250));
       }
     }
 
