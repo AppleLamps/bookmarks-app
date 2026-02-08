@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { getUserData } from "@/lib/kv";
-import { ensureValidToken, fetchBookmarkFolders, fetchFolderPostIds } from "@/lib/x-api";
+import { ensureValidToken, fetchBookmarkFolders, fetchFolderPostIds, fetchTweetsByIds } from "@/lib/x-api";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,10 +24,11 @@ export async function GET(request: NextRequest) {
   try {
     userData = await ensureValidToken(userData, session.xUserId);
 
-    // Single folder post IDs (used by the client when switching folder tabs)
+    // Single folder: get post IDs and then fetch full tweet data
     if (folderId) {
       const postIds = await fetchFolderPostIds(userData.accessToken, session.xUserId, folderId);
-      return NextResponse.json({ postIds });
+      const tweets = await fetchTweetsByIds(userData.accessToken, postIds);
+      return NextResponse.json({ postIds, tweets });
     }
 
     const folders = await fetchBookmarkFolders(userData.accessToken, session.xUserId);

@@ -208,6 +208,54 @@ export async function fetchFolderPostIds(
   return postIds;
 }
 
+export async function fetchTweetsByIds(
+  accessToken: string,
+  ids: string[]
+): Promise<Bookmark[]> {
+  if (ids.length === 0) return [];
+
+  const allBookmarks: Bookmark[] = [];
+
+  // X API allows up to 100 IDs per request
+  for (let i = 0; i < ids.length; i += 100) {
+    const batch = ids.slice(i, i + 100);
+    const params = new URLSearchParams({
+      ids: batch.join(","),
+      "tweet.fields": "created_at,public_metrics,author_id,entities,attachments,lang,referenced_tweets,note_tweet",
+      expansions: "author_id,attachments.media_keys,referenced_tweets.id,referenced_tweets.id.author_id",
+      "user.fields": "username,name,verified,profile_image_url,description,public_metrics",
+      "media.fields": "media_key,type,url,preview_image_url,alt_text,width,height,duration_ms,variants",
+    });
+
+    const response = await fetch(
+      `https://api.x.com/2/tweets?${params}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    if (response.status === 429) {
+      throw new Error("Rate limited by X API. Please wait a few minutes and try again.");
+    }
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to fetch tweets: ${error}`);
+    }
+
+    const apiResponse: XApiBookmarksResponse = await response.json();
+    const bookmarks = mergeBookmarksWithAuthors(apiResponse);
+    allBookmarks.push(...bookmarks);
+
+    // Small delay between batches to avoid rate limits
+    if (i + 100 < ids.length) {
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+
+  return allBookmarks;
+}
+
 export async function fetchUserProfile(accessToken: string) {
   const response = await fetch(
     "https://api.x.com/2/users/me?user.fields=profile_image_url",

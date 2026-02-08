@@ -109,13 +109,22 @@ export default function BookmarkList({ username }: BookmarkListProps) {
 
     try {
       const res = await fetch(`/api/folders?folderId=${encodeURIComponent(folderId)}`);
-      const data: { postIds?: string[]; error?: string } = await res.json();
+      const data: { postIds?: string[]; tweets?: Bookmark[]; error?: string } = await res.json();
       if (!res.ok) {
         throw new Error(data.error || "Failed to fetch folder contents");
       }
 
       const postIds = data.postIds || [];
       setFolderMemberships((prev) => ({ ...prev, [folderId]: postIds }));
+
+      // Merge any tweets from the folder that aren't already in our local list
+      if (data.tweets && data.tweets.length > 0) {
+        setBookmarks((prev) => {
+          const existingIds = new Set(prev.map((b) => b.id));
+          const newTweets = data.tweets!.filter((t) => !existingIds.has(t.id));
+          return newTweets.length > 0 ? [...prev, ...newTweets] : prev;
+        });
+      }
 
       // Incrementally update reverse map: postId -> folder names
       setPostFolderMap((prev) => {
