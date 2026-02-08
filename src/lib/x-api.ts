@@ -151,6 +151,10 @@ export async function fetchBookmarkFolders(
       }
     );
 
+    if (response.status === 429) {
+      throw new Error("Rate limited by X API while fetching folders. Please wait a bit and try again.");
+    }
+
     if (!response.ok) {
       const error = await response.text();
       throw new Error(`Failed to fetch bookmark folders: ${error}`);
@@ -184,6 +188,10 @@ export async function fetchFolderPostIds(
         headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
+
+    if (response.status === 429) {
+      throw new Error("Rate limited by X API while fetching folder contents. Please wait a bit and try again.");
+    }
 
     if (!response.ok) {
       const error = await response.text();

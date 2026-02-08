@@ -24,8 +24,10 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
   const [folders, setFolders] = useState<BookmarkFolder[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null); // null = "All"
   const [folderMemberships, setFolderMemberships] = useState<Record<string, string[]>>({}); // folderId -> postIds
+  const [folderMembershipErrors, setFolderMembershipErrors] = useState<Record<string, string>>({});
   const [postFolderMap, setPostFolderMap] = useState<Map<string, string[]>>(new Map()); // postId -> folderNames
   const [loadingFolders, setLoadingFolders] = useState(false);
+  const [loadingFolderId, setLoadingFolderId] = useState<string | null>(null);
 
   // Search state
   const [search, setSearch] = useState("");
@@ -52,31 +54,54 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
     }
   }, []);
 
-  // Fetch folders + memberships on mount
+  const loadFolderMembers = useCallback(async (folderId: string, folderName: string) => {
+    setLoadingFolderId(folderId);
+    setFolderMembershipErrors((prev) => {
+      if (!prev[folderId]) return prev;
+      const { [folderId]: _, ...rest } = prev;
+      return rest;
+    });
+
+    try {
+      const res = await fetch(`/api/folders?folderId=${encodeURIComponent(folderId)}`);
+      const data: { postIds?: string[]; error?: string } = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch folder contents");
+      }
+
+      const postIds = data.postIds || [];
+      setFolderMemberships((prev) => ({ ...prev, [folderId]: postIds }));
+
+      // Incrementally update reverse map: postId -> folder names
+      setPostFolderMap((prev) => {
+        const next = new Map(prev);
+        for (const postId of postIds) {
+          const existing = next.get(postId) || [];
+          if (!existing.includes(folderName)) {
+            next.set(postId, [...existing, folderName]);
+          }
+        }
+        return next;
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to fetch folder contents";
+      setFolderMemberships((prev) => ({ ...prev, [folderId]: [] }));
+      setFolderMembershipErrors((prev) => ({ ...prev, [folderId]: message }));
+    } finally {
+      setLoadingFolderId((cur) => (cur === folderId ? null : cur));
+    }
+  }, []);
+
+  // Fetch folders on mount (memberships are loaded lazily per-folder to avoid 429 bursts)
   useEffect(() => {
     async function loadFolders() {
       setLoadingFolders(true);
       try {
-        const res = await fetch("/api/folders?includeMembers=true");
+        const res = await fetch("/api/folders");
         if (res.ok) {
           const data = await res.json();
           const loadedFolders: BookmarkFolder[] = data.folders || [];
-          const memberships: Record<string, string[]> = data.memberships || {};
           setFolders(loadedFolders);
-          setFolderMemberships(memberships);
-
-          // Build reverse map: postId -> folder names
-          const reverseMap = new Map<string, string[]>();
-          const folderNameById = new Map(loadedFolders.map((f) => [f.id, f.name]));
-          for (const [folderId, postIds] of Object.entries(memberships)) {
-            const folderName = folderNameById.get(folderId) || folderId;
-            for (const postId of postIds) {
-              const existing = reverseMap.get(postId) || [];
-              existing.push(folderName);
-              reverseMap.set(postId, existing);
-            }
-          }
-          setPostFolderMap(reverseMap);
         }
       } catch {
         // Folders are optional; silently ignore
@@ -86,6 +111,17 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
     }
     loadFolders();
   }, []);
+
+  // When selecting a folder, fetch its membership if we don't have it yet (or if it previously errored)
+  useEffect(() => {
+    if (!selectedFolder) return;
+    if (folderMemberships[selectedFolder] && !folderMembershipErrors[selectedFolder]) return;
+
+    const folder = folders.find((f) => f.id === selectedFolder);
+    if (!folder) return;
+
+    loadFolderMembers(folder.id, folder.name);
+  }, [selectedFolder, folderMemberships, folderMembershipErrors, folders, loadFolderMembers]);
 
   // Initial load: fetch free bookmarks
   useEffect(() => {
@@ -102,6 +138,11 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
   // Filtered bookmarks
   const filteredBookmarks = useMemo(() => {
     let result = bookmarks;
+
+    // If a folder is selected but the membership hasn't been loaded yet, don't show misleading results.
+    if (selectedFolder && folderMemberships[selectedFolder] === undefined) {
+      return [];
+    }
 
     if (selectedFolder && folderMemberships[selectedFolder]) {
       const folderPostIds = new Set(folderMemberships[selectedFolder]);
@@ -122,6 +163,9 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
   }, [bookmarks, selectedFolder, folderMemberships, search]);
 
   const canBuyMore = hasMore && !loading;
+  const folderFilterLoading = !!selectedFolder
+    && folderMemberships[selectedFolder] === undefined
+    && loadingFolderId === selectedFolder;
 
   return (
     <div className="max-w-2xl mx-auto px-6 py-8">
@@ -176,7 +220,18 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
           {folders.map((folder) => (
             <button
               key={folder.id}
-              onClick={() => setSelectedFolder(folder.id === selectedFolder ? null : folder.id)}
+              onClick={() => {
+                const nextSelected = folder.id === selectedFolder ? null : folder.id;
+                setSelectedFolder(nextSelected);
+
+                if (nextSelected) {
+                  const hasMembership = folderMemberships[nextSelected] !== undefined
+                    && !folderMembershipErrors[nextSelected];
+                  if (!hasMembership) {
+                    setLoadingFolderId(nextSelected);
+                  }
+                }
+              }}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all whitespace-nowrap ${selectedFolder === folder.id
                 ? "bg-[var(--foreground)] text-[var(--background)] border-transparent"
                 : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-gray-300 dark:hover:border-gray-600"
@@ -185,6 +240,12 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
               <span className="flex items-center gap-1.5">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /></svg>
                 {folder.name}
+                {loadingFolderId === folder.id && (
+                  <svg className="w-3 h-3 animate-spin text-[var(--muted)]" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                )}
               </span>
             </button>
           ))}
@@ -194,6 +255,21 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
           )}
+        </div>
+      )}
+
+      {selectedFolder && folderMembershipErrors[selectedFolder] && (
+        <div className="animate-fade-in-scale mb-6 p-3 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 rounded-xl text-sm border border-amber-200 dark:border-amber-900/50 flex items-center justify-between gap-3">
+          <span>{folderMembershipErrors[selectedFolder]}</span>
+          <button
+            onClick={() => {
+              const folder = folders.find((f) => f.id === selectedFolder);
+              if (folder) loadFolderMembers(folder.id, folder.name);
+            }}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-200/70 dark:border-amber-900/50 hover:bg-amber-100/60 dark:hover:bg-amber-900/20 transition-colors flex-shrink-0"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -217,6 +293,18 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
         ))}
       </div>
 
+      {folderFilterLoading && (
+        <div className="flex justify-center py-16">
+          <div className="flex items-center gap-3 text-sm text-[var(--muted)]">
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            Loading folder...
+          </div>
+        </div>
+      )}
+
       {loading && (
         <div className="flex justify-center py-16">
           <div className="flex items-center gap-3 text-sm text-[var(--muted)]">
@@ -229,7 +317,7 @@ export default function BookmarkList({ username, paymentStatus }: BookmarkListPr
         </div>
       )}
 
-      {!loading && filteredBookmarks.length === 0 && !error && (
+      {!loading && !folderFilterLoading && filteredBookmarks.length === 0 && !error && (
         <div className="text-center py-16">
           <p className="text-sm text-[var(--muted)]">
             {search || selectedFolder ? "No bookmarks match your filter." : "No bookmarks found."}
