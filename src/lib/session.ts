@@ -1,10 +1,12 @@
 import { EncryptJWT, jwtDecrypt } from "jose";
 import { cookies } from "next/headers";
+import { createHash } from "crypto";
 import { SessionPayload } from "@/types";
 
-const SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET || "fallback-secret-change-in-production!!"
-);
+// A256GCM requires exactly 32 bytes — hash whatever secret is provided to guarantee that
+const SECRET = createHash("sha256")
+  .update(process.env.SESSION_SECRET || "fallback-secret-change-in-production!!")
+  .digest();
 
 const COOKIE_NAME = "bm_session";
 const OAUTH_COOKIE_NAME = "oauth_state";
