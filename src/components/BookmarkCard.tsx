@@ -175,9 +175,9 @@ export default function BookmarkCard({ bookmark }: BookmarkCardProps) {
       {/* Media grid */}
       {bookmark.media && bookmark.media.length > 0 && (
         <div className={`mb-3 grid gap-1 rounded-xl overflow-hidden ${bookmark.media.length === 1 ? "grid-cols-1" :
-            bookmark.media.length === 2 ? "grid-cols-2" :
-              bookmark.media.length === 3 ? "grid-cols-2" :
-                "grid-cols-2"
+          bookmark.media.length === 2 ? "grid-cols-2" :
+            bookmark.media.length === 3 ? "grid-cols-2" :
+              "grid-cols-2"
           }`}>
           {bookmark.media.map((m, i) => {
             const isVideo = m.type === "video" || m.type === "animated_gif";
@@ -209,6 +209,43 @@ export default function BookmarkCard({ bookmark }: BookmarkCardProps) {
             );
           })}
         </div>
+      )}
+
+      {/* Quoted tweet embed */}
+      {bookmark.quoted_tweet && (
+        <a
+          href={bookmark.quoted_tweet.author
+            ? `https://x.com/${bookmark.quoted_tweet.author.username}/status/${bookmark.quoted_tweet.id}`
+            : `https://x.com/i/status/${bookmark.quoted_tweet.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block mb-3 p-3 rounded-lg border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--surface)] transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {bookmark.quoted_tweet.author && (
+            <div className="flex items-center gap-1.5 mb-1.5">
+              {bookmark.quoted_tweet.author.profile_image_url && (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={bookmark.quoted_tweet.author.profile_image_url} alt="" className="w-4 h-4 rounded-full" />
+              )}
+              <span className="font-medium text-xs truncate">{bookmark.quoted_tweet.author.name}</span>
+              <span className="text-[11px] text-[var(--muted)] truncate">@{bookmark.quoted_tweet.author.username}</span>
+            </div>
+          )}
+          <p className="text-xs leading-relaxed text-[var(--foreground)]/80 whitespace-pre-wrap line-clamp-4">
+            {renderTextWithEntities(bookmark.quoted_tweet.text, bookmark.quoted_tweet.entities)}
+          </p>
+          {bookmark.quoted_tweet.media && bookmark.quoted_tweet.media.length > 0 && (() => {
+            const qm = bookmark.quoted_tweet!.media![0];
+            const qmUrl = qm.type === "photo" ? qm.url : qm.preview_image_url;
+            return qmUrl ? (
+              <div className="mt-2 rounded-lg overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qmUrl} alt={qm.alt_text || ""} className="w-full object-cover" style={{ maxHeight: "160px" }} loading="lazy" />
+              </div>
+            ) : null;
+          })()}
+        </a>
       )}
 
       {/* Metrics row */}

@@ -49,6 +49,22 @@ export interface ReferencedTweet {
   id: string;
 }
 
+export interface QuotedTweet {
+  id: string;
+  text: string;
+  author_id: string;
+  created_at: string;
+  public_metrics: {
+    retweet_count: number;
+    reply_count: number;
+    like_count: number;
+    quote_count: number;
+  };
+  entities?: TweetEntity;
+  media?: Media[];
+  author?: BookmarkAuthor;
+}
+
 export interface BookmarkAuthor {
   id: string;
   username: string;
@@ -80,6 +96,7 @@ export interface Bookmark {
   referenced_tweets?: ReferencedTweet[];
   note_tweet?: string;
   author?: BookmarkAuthor;
+  quoted_tweet?: QuotedTweet;
 }
 
 export interface BookmarkFolder {
@@ -170,6 +187,22 @@ export interface XApiBookmarksResponse {
         content_type: string;
         url: string;
       }>;
+    }>;
+    tweets?: Array<{
+      id: string;
+      text: string;
+      created_at: string;
+      author_id: string;
+      public_metrics: {
+        retweet_count: number;
+        reply_count: number;
+        like_count: number;
+        quote_count: number;
+      };
+      entities?: TweetEntity;
+      attachments?: {
+        media_keys?: string[];
+      };
     }>;
   };
   meta: {

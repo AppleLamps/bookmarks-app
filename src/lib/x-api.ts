@@ -27,7 +27,7 @@ export async function fetchBookmarks(
   const params = new URLSearchParams({
     max_results: String(maxResults),
     "tweet.fields": "created_at,public_metrics,author_id,entities,attachments,lang,referenced_tweets,note_tweet",
-    expansions: "author_id,attachments.media_keys",
+    expansions: "author_id,attachments.media_keys,referenced_tweets.id,referenced_tweets.id.author_id",
     "user.fields": "username,name,verified,profile_image_url,description,public_metrics",
     "media.fields": "media_key,type,url,preview_image_url,alt_text,width,height,duration_ms,variants",
   });
@@ -75,6 +75,15 @@ export function mergeBookmarksWithAuthors(apiResponse: XApiBookmarksResponse): B
     }
   }
 
+  // Build a map of included tweets (for quoted/replied_to)
+  type IncludedTweet = NonNullable<NonNullable<XApiBookmarksResponse["includes"]>["tweets"]>[number];
+  const tweetsMap = new Map<string, IncludedTweet>();
+  if (apiResponse.includes?.tweets) {
+    for (const t of apiResponse.includes.tweets) {
+      tweetsMap.set(t.id, t);
+    }
+  }
+
   return (apiResponse.data || []).map((tweet) => {
     // Resolve media from attachments
     const media = tweet.attachments?.media_keys
@@ -84,6 +93,28 @@ export function mergeBookmarksWithAuthors(apiResponse: XApiBookmarksResponse): B
     // Use note_tweet text if available (long posts)
     const fullText = tweet.note_tweet?.text || tweet.text;
     const entities = tweet.note_tweet?.entities || tweet.entities;
+
+    // Resolve quoted tweet
+    const quotedRef = tweet.referenced_tweets?.find((r) => r.type === "quoted");
+    let quoted_tweet: Bookmark["quoted_tweet"] = undefined;
+    if (quotedRef) {
+      const qt = tweetsMap.get(quotedRef.id);
+      if (qt) {
+        const qtMedia = qt.attachments?.media_keys
+          ?.map((key) => mediaMap.get(key))
+          .filter(Boolean) as Bookmark["media"];
+        quoted_tweet = {
+          id: qt.id,
+          text: qt.text,
+          author_id: qt.author_id,
+          created_at: qt.created_at,
+          public_metrics: qt.public_metrics,
+          entities: qt.entities,
+          media: qtMedia && qtMedia.length > 0 ? qtMedia : undefined,
+          author: usersMap.get(qt.author_id),
+        };
+      }
+    }
 
     return {
       id: tweet.id,
@@ -97,6 +128,7 @@ export function mergeBookmarksWithAuthors(apiResponse: XApiBookmarksResponse): B
       referenced_tweets: tweet.referenced_tweets,
       note_tweet: tweet.note_tweet?.text,
       author: usersMap.get(tweet.author_id),
+      quoted_tweet,
     };
   });
 }
