@@ -16,6 +16,8 @@ export default function BookmarkList({ username }: BookmarkListProps) {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [totalFetched, setTotalFetched] = useState(0);
+  const [fetchingMore, setFetchingMore] = useState(false);
+  const [moreFetched, setMoreFetched] = useState(0);
 
   // Folders state
   const [folders, setFolders] = useState<BookmarkFolder[]>([]);
@@ -30,8 +32,55 @@ export default function BookmarkList({ username }: BookmarkListProps) {
   const [search, setSearch] = useState("");
 
   const fetchBookmarks = useCallback(async (type: "free" | "more") => {
-    setLoading(true);
     setError(null);
+
+    if (type === "more") {
+      setFetchingMore(true);
+      setMoreFetched(0);
+      try {
+        const res = await fetch(`/api/bookmarks?type=more`);
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.error || "Failed to fetch bookmarks");
+        }
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error("Streaming not supported");
+
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const event = JSON.parse(line);
+            if (event.type === "progress") {
+              setMoreFetched(event.fetched);
+            } else if (event.type === "complete") {
+              setBookmarks((prev) => [...prev, ...event.bookmarks]);
+              setHasMore(event.hasMore);
+              setTotalFetched(event.totalFetched);
+            } else if (event.type === "error") {
+              throw new Error(event.error);
+            }
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      } finally {
+        setFetchingMore(false);
+        setMoreFetched(0);
+      }
+      return;
+    }
+
+    setLoading(true);
     try {
       const res = await fetch(`/api/bookmarks?type=${type}`);
       const data: BookmarksResponse & { error?: string } = await res.json();
@@ -170,10 +219,11 @@ export default function BookmarkList({ username }: BookmarkListProps) {
         </div>
         <div className="flex items-center gap-2">
           <DownloadButton bookmarks={filteredBookmarks} username={username} />
-          {canFetchMore && (
+          {(canFetchMore || fetchingMore) && (
             <FetchMoreButton
               onClick={() => fetchBookmarks("more")}
-              loading={loading}
+              loading={fetchingMore}
+              fetchedCount={moreFetched}
             />
           )}
         </div>

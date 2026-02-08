@@ -71,49 +71,87 @@ export async function GET(request: NextRequest) {
     // NOTE: We use max_results=25 because the X API has a bug where
     // large page sizes (e.g. 100) cause pagination to cut off prematurely,
     // returning far fewer results than actually available.
-    const allBookmarks: Bookmark[] = [];
-    let remaining = MORE_BATCH_SIZE;
-    let hasMore = true;
-    const MAX_API_CALLS = 20;
-    let calls = 0;
+    // Stream progress back to the client as NDJSON so the UI can show a live count.
+    const encoder = new TextEncoder();
+    const xUserId = session.xUserId;
+    let ud = userData;
 
-    while (remaining > 0 && hasMore && calls < MAX_API_CALLS) {
-      calls += 1;
-      const maxResults = Math.min(remaining, 25);
-      const apiResponse = await fetchBookmarks(
-        userData.accessToken,
-        session.xUserId,
-        maxResults,
-        userData.nextToken
-      );
+    const stream = new ReadableStream({
+      async start(controller) {
+        const allBookmarks: Bookmark[] = [];
+        let remaining = MORE_BATCH_SIZE;
+        let hasMore = true;
+        const MAX_API_CALLS = 20;
+        let calls = 0;
+        let batchFetched = 0;
 
-      const bookmarks = mergeBookmarksWithAuthors(apiResponse);
-      allBookmarks.push(...bookmarks);
+        try {
+          while (remaining > 0 && hasMore && calls < MAX_API_CALLS) {
+            calls += 1;
+            const maxResults = Math.min(remaining, 25);
+            const apiResponse = await fetchBookmarks(
+              ud.accessToken,
+              xUserId,
+              maxResults,
+              ud.nextToken
+            );
 
-      const resultCount = apiResponse.meta.result_count ?? 0;
-      userData.nextToken = apiResponse.meta.next_token || null;
-      userData.totalFetched += resultCount;
-      remaining -= resultCount;
-      hasMore = !!apiResponse.meta.next_token;
+            const bookmarks = mergeBookmarksWithAuthors(apiResponse);
+            allBookmarks.push(...bookmarks);
 
-      // Avoid spinning if the API returns empty pages while still providing a next token.
-      if (resultCount === 0) {
-        break;
-      }
+            const resultCount = apiResponse.meta.result_count ?? 0;
+            ud.nextToken = apiResponse.meta.next_token || null;
+            ud.totalFetched += resultCount;
+            remaining -= resultCount;
+            batchFetched += resultCount;
+            hasMore = !!apiResponse.meta.next_token;
 
-      // Small delay between calls to avoid hitting rate limits
-      if (remaining > 0 && hasMore) {
-        await new Promise((r) => setTimeout(r, 250));
-      }
-    }
+            // Send progress event
+            controller.enqueue(
+              encoder.encode(
+                JSON.stringify({ type: "progress", fetched: batchFetched, target: MORE_BATCH_SIZE }) + "\n"
+              )
+            );
 
-    await setUserData(session.xUserId, userData);
-    await appendCachedBookmarks(session.xUserId, allBookmarks);
+            if (resultCount === 0) {
+              break;
+            }
 
-    return NextResponse.json({
-      bookmarks: allBookmarks,
-      hasMore,
-      totalFetched: userData.totalFetched,
+            if (remaining > 0 && hasMore) {
+              await new Promise((r) => setTimeout(r, 250));
+            }
+          }
+
+          await setUserData(xUserId, ud);
+          await appendCachedBookmarks(xUserId, allBookmarks);
+
+          // Send final result
+          controller.enqueue(
+            encoder.encode(
+              JSON.stringify({
+                type: "complete",
+                bookmarks: allBookmarks,
+                hasMore,
+                totalFetched: ud.totalFetched,
+              }) + "\n"
+            )
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Failed to fetch bookmarks";
+          controller.enqueue(
+            encoder.encode(JSON.stringify({ type: "error", error: message }) + "\n")
+          );
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson",
+        "Transfer-Encoding": "chunked",
+      },
     });
   } catch (err) {
     console.error("Bookmark fetch error:", err);
